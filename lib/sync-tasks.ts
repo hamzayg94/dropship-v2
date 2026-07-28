@@ -145,10 +145,8 @@ async function fetchTransactionsByType(type: string, days: number): Promise<Reco
 export async function runFinanceSync(user: string, opts: { days?: number } = {}) {
   const days         = opts.days || 180
   const transactions = await fetchTransactionsByType('SALE', days)
-  const refunds      = await fetchTransactionsByType('REFUND', days)
   const db           = getDb()
 
-  // ── Update payout/fvf from SALE transactions ──────────────────────────────
   const updateOrder = db.prepare(`
     UPDATE orders SET
       fvf        = ?,
@@ -172,30 +170,6 @@ export async function runFinanceSync(user: string, opts: { days?: number } = {})
     linked += result.changes
   }
 
-  // ── Mark refunded orders from REFUND transactions ─────────────────────────
-  const markRefunded = db.prepare(`
-    UPDATE orders SET
-      payout     = 0,
-      fvf        = 0,
-      profit     = 0,
-      margin     = 0,
-      status     = 'Refunded',
-      updated_at = datetime('now')
-    WHERE id = ? AND ebay_synced = 1
-      AND status NOT IN ('Refunded', 'Cancelled')
-  `)
-
-  let refundedCount = 0
-  for (const tx of refunds) {
-    const orderId = (tx.orderId as string) || ''
-    if (!orderId) continue
-    const result = markRefunded.run(orderId) as { changes: number }
-    refundedCount += result.changes
-  }
-
-  logActivity({
-    user, action: 'sync_finance', entityType: 'sync',
-    detail: `${linked} orders updated from ${transactions.length} SALE transactions | ${refundedCount} orders marked Refunded from ${refunds.length} REFUND transactions`,
-  })
-  return { transactions: transactions.length, linked, refunds: refunds.length, refundedCount }
+  logActivity({ user, action: 'sync_finance', entityType: 'sync', detail: `${linked} orders updated from ${transactions.length} Finance API transactions` })
+  return { transactions: transactions.length, linked }
 }
