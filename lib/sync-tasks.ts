@@ -125,13 +125,13 @@ export async function runFulfillmentSync(user: string, opts: { fullSync?: boolea
 
 // ─── Finance ────────────────────────────────────────────────────────────────
 
-async function fetchAllTransactions(days: number): Promise<Record<string, unknown>[]> {
+async function fetchTransactionsByType(type: string, days: number): Promise<Record<string, unknown>[]> {
   const results: Record<string, unknown>[] = []
   const fromDate  = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
   const dateRange = `${fromDate}T00:00:00.000Z..${new Date(Date.now() - 5 * 60 * 1000).toISOString()}`
   let offset = 0
   while (true) {
-    const qs   = new URLSearchParams({ transactionType: 'SALE', transactionDateRange: dateRange, limit: '200', offset: String(offset) }).toString()
+    const qs   = new URLSearchParams({ transactionType: type, transactionDateRange: dateRange, limit: '200', offset: String(offset) }).toString()
     const data = await ebayFetch(`/sell/finances/v1/transaction?${qs}`) as Record<string, unknown>
     const items = (data.transactions || []) as Record<string, unknown>[]
     results.push(...items)
@@ -143,9 +143,12 @@ async function fetchAllTransactions(days: number): Promise<Record<string, unknow
 }
 
 export async function runFinanceSync(user: string, opts: { days?: number } = {}) {
-  const transactions = await fetchAllTransactions(opts.days || 180)
+  const days         = opts.days || 180
+  const transactions = await fetchTransactionsByType('SALE', days)
+  const refunds      = await fetchTransactionsByType('REFUND', days)
   const db           = getDb()
 
+  // ── Update payout/fvf from SALE transactions ──────────────────────────────
   const updateOrder = db.prepare(`
     UPDATE orders SET
       fvf        = ?,
@@ -169,6 +172,30 @@ export async function runFinanceSync(user: string, opts: { days?: number } = {})
     linked += result.changes
   }
 
-  logActivity({ user, action: 'sync_finance', entityType: 'sync', detail: `${linked} orders updated from ${transactions.length} Finance API transactions` })
-  return { transactions: transactions.length, linked }
+  // ── Mark refunded orders from REFUND transactions ─────────────────────────
+  const markRefunded = db.prepare(`
+    UPDATE orders SET
+      payout     = 0,
+      fvf        = 0,
+      profit     = 0,
+      margin     = 0,
+      status     = 'Refunded',
+      updated_at = datetime('now')
+    WHERE id = ? AND ebay_synced = 1
+      AND status NOT IN ('Refunded', 'Cancelled')
+  `)
+
+  let refundedCount = 0
+  for (const tx of refunds) {
+    const orderId = (tx.orderId as string) || ''
+    if (!orderId) continue
+    const result = markRefunded.run(orderId) as { changes: number }
+    refundedCount += result.changes
+  }
+
+  logActivity({
+    user, action: 'sync_finance', entityType: 'sync',
+    detail: `${linked} orders updated from ${transactions.length} SALE transactions | ${refundedCount} orders marked Refunded from ${refunds.length} REFUND transactions`,
+  })
+  return { transactions: transactions.length, linked, refunds: refunds.length, refundedCount }
 }
