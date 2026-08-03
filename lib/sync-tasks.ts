@@ -150,7 +150,6 @@ export async function runFinanceSync(user: string, opts: { days?: number } = {})
   const updateOrder = db.prepare(`
     UPDATE orders SET
       fvf        = ?,
-      ad_fee     = ?,
       payout     = ?,
       profit     = ? - ad_fee - cost,
       margin     = CASE WHEN ? > 0 THEN (? - ad_fee - cost) / ? * 100 ELSE 0 END,
@@ -166,7 +165,7 @@ export async function runFinanceSync(user: string, opts: { days?: number } = {})
     const payout = parseFloat(((tx.amount as Record<string,unknown>)?.value as string) || '0')
     const fvf    = parseFloat(((tx.totalFeeAmount as Record<string,unknown>)?.value as string) || '0')
     if (payout <= 0) continue
-    const result = updateOrder.run(fvf, 0, payout, payout, payout, payout, payout, orderId) as { changes: number }
+    const result = updateOrder.run(fvf, payout, payout, payout, payout, payout, orderId) as { changes: number }
     linked += result.changes
   }
 
