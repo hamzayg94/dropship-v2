@@ -15,6 +15,17 @@ export async function GET() {
     const summary   = liveSummary(effective)
     const monthly   = byMonth(effective)
 
+    // Overheads from monthly_expenses (same source as P&L)
+    const expenseRows = db.prepare('SELECT month, amount FROM monthly_expenses').all() as { month: string; amount: number }[]
+    const expenseByMonth: Record<string, number> = {}
+    for (const e of expenseRows) {
+      expenseByMonth[e.month] = (expenseByMonth[e.month] || 0) + Number(e.amount || 0)
+    }
+    const totalExpenses = Object.values(expenseByMonth).reduce((s, v) => s + v, 0)
+    summary.totalProfit        -= totalExpenses
+    thisMonthSum.totalProfit   -= (expenseByMonth[thisMonth] || 0)
+    lastMonthSum.totalProfit   -= (expenseByMonth[lastMonth] || 0)
+
     // This month
     const thisMonth  = new Date().toISOString().slice(0, 7)
     const lastMonth  = (() => {
