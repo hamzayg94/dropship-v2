@@ -6,17 +6,18 @@ import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, ShoppingBag, DollarSign, BarChart2,
-  MessageSquare, Settings, Package, Zap, LogOut, User, ScrollText,
+  MessageSquare, Settings, Package, Zap, LogOut, User, ScrollText, ShieldCheck,
 } from 'lucide-react'
 
 const NAV = [
-  { href: '/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
-  { href: '/orders',     label: 'Orders',       icon: ShoppingBag },
-  { href: '/costs',      label: 'Cost Entry',   icon: Package },
-  { href: '/pnl',        label: 'P&L',          icon: DollarSign },
-  { href: '/analytics',  label: 'Analytics',    icon: BarChart2 },
-  { href: '/ai',         label: 'AI Assistant', icon: MessageSquare },
-  { href: '/settings',   label: 'Settings',     icon: Settings },
+  { href: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
+  { href: '/orders',      label: 'Orders',       icon: ShoppingBag },
+  { href: '/costs',       label: 'Cost Entry',   icon: Package },
+  { href: '/pnl',         label: 'P&L',          icon: DollarSign },
+  { href: '/analytics',   label: 'Analytics',    icon: BarChart2 },
+  { href: '/compliance',  label: 'Compliance',   icon: ShieldCheck },
+  { href: '/ai',          label: 'AI Assistant', icon: MessageSquare },
+  { href: '/settings',    label: 'Settings',     icon: Settings },
 ]
 
 const ADMIN_NAV = [
@@ -34,12 +35,14 @@ interface SessionUser { username: string; role: string }
 
 export default function Sidebar() {
   const pathname = usePathname()
-  const [auth, setAuth]   = useState<AuthStatus | null>(null)
-  const [user, setUser]   = useState<SessionUser | null>(null)
+  const [auth, setAuth]             = useState<AuthStatus | null>(null)
+  const [user, setUser]             = useState<SessionUser | null>(null)
+  const [complianceAlerts, setComplianceAlerts] = useState(0)
 
   useEffect(() => {
     fetch('/api/auth/status').then(r => r.json()).then(setAuth).catch(() => {})
     fetch('/api/session/me').then(r => r.json()).then(d => setUser(d.user)).catch(() => {})
+    fetch('/api/compliance').then(r => r.json()).then((d: { alerts?: number }) => setComplianceAlerts(d.alerts || 0)).catch(() => {})
   }, [])
 
   const logout = async () => {
@@ -66,6 +69,7 @@ export default function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+          const badge  = href === '/compliance' && complianceAlerts > 0 ? complianceAlerts : 0
           return (
             <Link key={href} href={href}
               className={cn(
@@ -79,7 +83,12 @@ export default function Sidebar() {
                 'flex-shrink-0',
                 active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600',
               )} />
-              {label}
+              <span className="flex-1">{label}</span>
+              {badge > 0 && (
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {badge}
+                </span>
+              )}
             </Link>
           )
         })}

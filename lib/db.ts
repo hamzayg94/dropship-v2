@@ -114,6 +114,34 @@ function runMigrations(db: DatabaseSync) {
       UNIQUE(month, category, description)
     );
     CREATE INDEX IF NOT EXISTS monthly_expenses_month ON monthly_expenses(month);
+
+    CREATE TABLE IF NOT EXISTS compliance_obligations (
+      id           TEXT    PRIMARY KEY,
+      title        TEXT    NOT NULL,
+      description  TEXT    NOT NULL DEFAULT '',
+      category     TEXT    NOT NULL DEFAULT 'tax',
+      frequency    TEXT    NOT NULL DEFAULT 'annual',
+      period       TEXT    NOT NULL DEFAULT '',
+      due_date     TEXT    NOT NULL,
+      submit_to    TEXT    NOT NULL DEFAULT '',
+      submit_url   TEXT    NOT NULL DEFAULT '',
+      sort_order   INTEGER NOT NULL DEFAULT 0,
+      completed    INTEGER NOT NULL DEFAULT 0,
+      completed_at TEXT,
+      notes        TEXT    NOT NULL DEFAULT '',
+      created_at   TEXT    DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS compliance_subtasks (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      obligation_id TEXT    NOT NULL REFERENCES compliance_obligations(id) ON DELETE CASCADE,
+      step_order    INTEGER NOT NULL DEFAULT 0,
+      label         TEXT    NOT NULL,
+      detail        TEXT    NOT NULL DEFAULT '',
+      done          INTEGER NOT NULL DEFAULT 0,
+      done_at       TEXT,
+      created_at    TEXT    DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS compliance_subtasks_ob ON compliance_subtasks(obligation_id);
   `)
 }
 
